@@ -301,9 +301,27 @@ def get_individual(id):
 
 
 
-def get_spikes(id_block, channel):
+def save_channel_spikes(id_block, channel):
     """
-    Process spikes of signals from session. Before run this functions you must run
+    save_channel_spikes(id_block, channel)
+    
+    Get spikes from a signal of a channel and save it in database.
+    
+    
+    Parameters
+    ----------
+    id_block: Integer
+              Id of project that channel to process belong.
+    channel: Integer
+             Number of channel to process.
+             
+    Returns
+    -------
+    
+    Example
+    -------
+    
+    
     """
     global NDB
     
@@ -327,16 +345,37 @@ def get_spikes(id_block, channel):
             #[(id_seg_ansig, _)] = neodb.get_id(NDB, "analogsignal", )
             spike = neodb.core.SpikeDB(id_segment = segment.id_segment, 
                                        id_recordingchannel = segment.id_recordingchannel,
-                                       waveform = segment.signal,
+                                       waveform = spikes[i],
                                        time = t_spike,
                                        index = index[i],
                                        sampling_rate = segment.sampling_rate)
             id_spike = spike.save(NDB)
-        
-        print ansig.signal
-    else:
-        return None
+            
+    #TODO: returns of the function neurodb.save_channel_spikes
     
+def update_spike_coordenates(id_block, channel):
+    #TODO: Create p1, p2 y p3 columns
+    global NDB
+    
+    if NDB == None:
+        connect_db()
+    
+    spikes_id = neodb.core.spikedb.get_ids_from_db(NDB, id_block, channel)
+    
+    for id in spikes_id:
+        spike = neodb.core.spikedb.get_from_db(NDB, id_block, channel, id = id)
+        signal = spike[0].waveform
+        
+        dft = np.fft.fft(signal)
+        
+        p1 = float(np.real(dft[len(dft)/2]))
+        p2 = float(np.real(dft[len(dft)/2+1]))
+        p3 = float(np.real(dft[len(dft)/2+2]))
+        
+        neodb.core.spikedb.update(NDB, id = id, p1 = p1, p2 = p2, p3 = p3)
+        pass
+    pass
+
 # def eliminar(ndb):
 #     
 #     query = "delete from public.analogsignal where name = '030712_1_00'"
@@ -367,7 +406,7 @@ if __name__ == '__main__':
     #eliminar(ndb)
     #last_file('/home/sergio/iibm/sandbox')
 
-    get_spikes(54, 3)
-    
+    save_channel_spikes(54, 3)
+    #update_spike_coordenates(54, 3)
 
     pass
