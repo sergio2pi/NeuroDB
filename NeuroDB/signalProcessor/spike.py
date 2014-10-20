@@ -429,12 +429,12 @@ class Detector():
                          detection = 'pos',
                          stdmin = 5.00,
                          stdmax = 50,
+                         interpolation = 'y',
+                         int_factor = 2,
                          fmin_detect = 300,
                          fmax_detect = 3000,
                          fmin_sort = 300,
                          fmax_sort = 3000,
-                         interpolation = 'y',
-                         int_factor = 2,
                          sr = 14400,
                          min_ref_per = 1.5,
                          cluster_linux_dir = '/home/sergio/iibm/workspace2/NeuroDB/src/NeuroDB/signalProcessor'
@@ -484,13 +484,15 @@ class Detector():
         
         try:
             for i in range(nspk):
+                if i == 979:
+                    pass
                 if spikes[i,:].any():
                     intspikes = interpolate.spline(s,spikes[i,:],ints)
-                    iaux = intspikes[self.w_pre*self.int_factor-3:self.w_pre*self.int_factor+6].argmax(0)
+                    iaux = intspikes[self.w_pre*self.int_factor-1:self.w_pre*self.int_factor+6].argmax(0)
                     iaux = iaux + self.w_pre*self.int_factor
-                    spikes1[i,0:self.w_pre] = intspikes[iaux-self.w_pre*self.int_factor-1:iaux-1:self.int_factor]
+                    spikes1[i,0:self.w_pre-1] = intspikes[iaux-self.w_pre*self.int_factor:iaux:self.int_factor]
                     #spikes1[i,w_pre-1:-1:-1] = intspikes[iaux-int_factor:iaux-w_pre*int_factor-int_factor:-int_factor]
-                    spikes1[i,self.w_pre:ls+1] = intspikes[iaux-1:iaux+self.w_post*self.int_factor-1:self.int_factor]
+                    spikes1[i,self.w_pre:ls+1] = intspikes[iaux:iaux+self.w_post*self.int_factor:self.int_factor]
                 else:
                     spikes1[i,:] = spikes[i,0:ls]
         except:
@@ -539,7 +541,7 @@ class Detector():
      
         aux = np.argwhere(spikes[:,self.w_pre] == 0)       #erases indexes that were artifacts
         if len(aux) != 0:
-            aux = aux[0][0]
+            aux = aux.reshape((1,len(aux)))[0]
             spikes = np.delete(spikes, aux, axis = 0)
             index = np.delete(index,aux)
  
