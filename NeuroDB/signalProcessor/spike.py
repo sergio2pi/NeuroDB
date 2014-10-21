@@ -453,7 +453,7 @@ class Detector():
             sr              sampling frequency, in Hz.
             min_ref_per     detector dead time. 
             ref             number of counts corresponding to the dead time'''
-        
+        #TODO: algorithm does not works to int_factor != 2
         self.w_pre = w_pre
         self.w_post = w_post
         self.detection = detection
@@ -484,15 +484,25 @@ class Detector():
         
         try:
             for i in range(nspk):
-                if i == 979:
+                if i == 970:
                     pass
                 if spikes[i,:].any():
+                    print i
                     intspikes = interpolate.spline(s,spikes[i,:],ints)
-                    iaux = intspikes[self.w_pre*self.int_factor-1:self.w_pre*self.int_factor+6].argmax(0)
-                    iaux = iaux + self.w_pre*self.int_factor
-                    spikes1[i,0:self.w_pre-1] = intspikes[iaux-self.w_pre*self.int_factor:iaux:self.int_factor]
-                    #spikes1[i,w_pre-1:-1:-1] = intspikes[iaux-int_factor:iaux-w_pre*int_factor-int_factor:-int_factor]
-                    spikes1[i,self.w_pre:ls+1] = intspikes[iaux:iaux+self.w_post*self.int_factor:self.int_factor]
+                    iaux = intspikes[self.w_pre*self.int_factor-1:self.w_pre*self.int_factor+8].argmax(0)
+                    iaux = iaux + self.w_pre*self.int_factor-1
+                    if iaux-self.w_pre*self.int_factor < 0:
+                        iaux = iaux + 1
+                    # iaux is index of the max of the spike. To put the max in w_pre, separates
+                    # intspikes in 2 vectors
+                    v1 = intspikes[iaux-self.w_pre*self.int_factor:iaux+2:self.int_factor]
+                    v2 = intspikes[iaux+2:iaux+self.w_post*self.int_factor+1:self.int_factor]
+                    spikes1[i,0:self.w_pre] = v1[1:]
+                    # padding 
+                    for j in range(len(v2)):
+                        spikes1[i,j+self.w_pre] = v2[j]
+                    
+                    #spikes1[i,self.w_pre:ls+1] = v2
                 else:
                     spikes1[i,:] = spikes[i,0:ls]
         except:

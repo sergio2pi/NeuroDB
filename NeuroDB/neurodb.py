@@ -406,7 +406,7 @@ if __name__ == '__main__':
     #eliminar(ndb)
     #last_file('/home/sergio/iibm/sandbox')
 
-    save_channel_spikes(54, 3)
-    #update_spike_coordenates(54, 3)
+    #save_channel_spikes(54, 3)
+    update_spike_coordenates(54, 3)
 
     pass
