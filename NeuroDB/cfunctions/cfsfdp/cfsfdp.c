@@ -6,14 +6,6 @@
 #include <math.h>
 
 
-void coss(double * in_array, double * out_array, int size){
-    int i;
-    for(i=0;i<size;i++){
-        out_array[i] = cos(in_array[i]);
-    }
-}
-
-
 int compare(const void *_a, const void *_b) {
     int *a, *b;
 
@@ -41,9 +33,9 @@ float get_distance_from_res(PGresult *res, int i, int j)
     sscanf(PQgetvalue(res, j, 1),"%f",&y2);
     sscanf(PQgetvalue(res, j, 2),"%f",&z2);
     tmp = get_distance(x1, y1, z1, x2, y2, z2);
-    
+
     return tmp;
-    
+
 }
 
 float get_dc(char connect[150], char id_block[20])
@@ -60,7 +52,6 @@ float get_dc(char connect[150], char id_block[20])
     int n = 0, i, j;
     float dc = 0.0;
     float* distances = NULL;
-    float x1, x2, y1, y2, z1, z2;
     int position;
 
     conn = PQconnectdb(connect);
@@ -81,13 +72,7 @@ float get_dc(char connect[150], char id_block[20])
 
     for (i = 0, n = 0; i < rec_count; i++) {
           for (j = 0; j < rec_count; j++, n++) {
-                sscanf(PQgetvalue(res, i, 0),"%f",&x1);
-                sscanf(PQgetvalue(res, i, 1),"%f",&y1);
-                sscanf(PQgetvalue(res, i, 2),"%f",&z1);
-                sscanf(PQgetvalue(res, j, 0),"%f",&x2);
-                sscanf(PQgetvalue(res, j, 1),"%f",&y2);
-                sscanf(PQgetvalue(res, j, 2),"%f",&z2);
-                distances[n] = get_distance(x1, y1, z1, x2, y2, z2);
+                distances[n] = get_distance_from_res(res, i, j);
           }
       }
 
@@ -103,6 +88,7 @@ float get_dc(char connect[150], char id_block[20])
 }
 
 int get_local_density(char connect[150], char id_block[20], float dc, double* local_density)
+//TODO: Parameter size
 {
 
     PGconn          *conn;
@@ -112,7 +98,6 @@ int get_local_density(char connect[150], char id_block[20], float dc, double* lo
     char query[200];
     int i, j;
     double distance;
-    float x1, x2, y1, y2, z1, z2;
 
     strcpy(query,"SELECT spike.p1, spike.p2, spike.p3 from SPIKE JOIN  segment ON id_segment = segment.id WHERE segment.id_block = ");
     strcat(query, id_block);
@@ -137,17 +122,12 @@ int get_local_density(char connect[150], char id_block[20], float dc, double* lo
     for (i = 0; i < rec_count; i++) local_density[i] = 0;
 
     for (i = 0; i < rec_count; i++) {
-          for (j = 0; j < rec_count; j++) {
-                sscanf(PQgetvalue(res, i, 0),"%f",&x1);
-                sscanf(PQgetvalue(res, i, 1),"%f",&y1);
-                sscanf(PQgetvalue(res, i, 2),"%f",&z1);
-                sscanf(PQgetvalue(res, j, 0),"%f",&x2);
-                sscanf(PQgetvalue(res, j, 1),"%f",&y2);
-                sscanf(PQgetvalue(res, j, 2),"%f",&z2);
-                distance = get_distance(x1, y1, z1, x2, y2, z2);
+          for (j = i+1; j < rec_count; j++) {
+                distance = get_distance_from_res(res, i, j);
                 if ( (distance - dc) < 0 )
                 {
                     local_density[i] += 1;
+                    local_density[j] += 1;
                 }
           }
       }
@@ -160,29 +140,26 @@ int get_local_density(char connect[150], char id_block[20], float dc, double* lo
 
 
 int get_distance_to_higher_density(char connect[], char id_block[], double* rho, double* delta, int size){
-        
+
     PGconn          *conn;
     PGresult        *res;
     int             rec_count;
-    
+
     int nSamples = size;
     double dist;
     double tmp;
     char query[200];
-    int i, j, flag;
-    double distance;
-    float x1, x2, y1, y2, z1, z2;
+    int i, j, k, flag;
 
     strcpy(query,"SELECT spike.p1, spike.p2, spike.p3 from SPIKE JOIN  segment ON id_segment = segment.id WHERE segment.id_block = ");
     strcat(query, id_block);
-    
+
     conn = PQconnectdb(connect);
 
     if (PQstatus(conn) == CONNECTION_BAD) {
         puts("We were unable to connect to the database");
         return 1;
     }
-
 
     res = PQexec(conn,query);
 
@@ -192,18 +169,21 @@ int get_distance_to_higher_density(char connect[], char id_block[], double* rho,
     }
 
     rec_count = PQntuples(res);
-    
-    for (i = 0; i < rec_count; i++) delta[i] = 1;
-    
+
+    for (i = 0; i < rec_count; i++)
+        delta[i] = 0;
+
+    puts("flag");
+
     for(i = 0; i < nSamples; i++){
         dist = 0.0;
         flag = 0;
         for(j = 0; j < nSamples; j++){
             if(i == j) continue;
             if(rho[j] > rho[i]){
-           
+
                 tmp = get_distance_from_res(res, i, j);
-            
+
                 if(!flag){
                     dist = tmp;
                     flag = 1;
@@ -211,25 +191,17 @@ int get_distance_to_higher_density(char connect[], char id_block[], double* rho,
             }
         }
         if(!flag){
-            for(j = 0; j < nSamples; j++){
-
-                sscanf(PQgetvalue(res, i, 0),"%f",&x1);
-                sscanf(PQgetvalue(res, i, 1),"%f",&y1);
-                sscanf(PQgetvalue(res, i, 2),"%f",&z1);
-                sscanf(PQgetvalue(res, j, 0),"%f",&x2);
-                sscanf(PQgetvalue(res, j, 1),"%f",&y2);
-                sscanf(PQgetvalue(res, j, 2),"%f",&z2);
-                tmp = get_distance(x1, y1, z1, x2, y2, z2);
-
+            for(k = 0; k < nSamples; k++){
+                tmp = get_distance_from_res(res, i, k);
                 dist = tmp > dist ? tmp : dist;
             }
         }
         delta[i] = dist;
     }
-    
+
     PQclear(res);
-    PQfinish(conn);    
-    
+    PQfinish(conn);
+
     return 0;
 }
 
@@ -238,4 +210,3 @@ int main(int argc, char* argv[])
 {
     return 1;
 }
-

@@ -34,6 +34,7 @@ import time
 import re
 import signalProcessor.spike as Spike
 import numpy as np
+from sklearn.decomposition import PCA
 
 NDB = None
 
@@ -359,21 +360,25 @@ def update_spike_coordenates(id_block, channel):
     
     if NDB == None:
         connect_db()
+        
+    spikes = neodb.core.spikedb.get_from_db(NDB, id_block, channel)
+    mspikes = []
+    
+    for spike in spikes:
+        mspikes.append(spike.waveform)
+    
+    pca = PCA(n_components=3)
+    transf = pca.fit_transform(mspikes)
+    
     
     spikes_id = neodb.core.spikedb.get_ids_from_db(NDB, id_block, channel)
     
-    for id in spikes_id:
-        spike = neodb.core.spikedb.get_from_db(NDB, id_block, channel, id = id)
-        signal = spike[0].waveform
-        
-        dft = np.fft.fft(signal)
-        
-        p1 = float(np.real(dft[len(dft)/2]))
-        p2 = float(np.real(dft[len(dft)/2+1]))
-        p3 = float(np.real(dft[len(dft)/2+2]))
-        
-        neodb.core.spikedb.update(NDB, id = id, p1 = p1, p2 = p2, p3 = p3)
-        pass
+    i = 0
+    for p in transf:
+        id = spikes_id[i]
+        neodb.core.spikedb.update(NDB, id = id, p1 = p[0], p2 = p[1], p3 = p[2])
+        i = i+1
+    
     pass
 
 # def eliminar(ndb):
