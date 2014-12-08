@@ -25,19 +25,25 @@ libcd.get_local_density.restype = ctypes.c_int
 libcd.get_distance_to_higher_density.argtypes = [ctypes.c_char_p, ctypes.c_char_p, array_1d_double, array_1d_double, ctypes.c_int]
 libcd.get_distance_to_higher_density.restype = ctypes.c_int
 
-libcd.get_dc.argtypes = []
+libcd.get_dc.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_float]
 libcd.get_dc.restype = ctypes.c_float
 
-dc = libcd.get_dc("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54")
+libcd.cluster_dp.argtypes = [ctypes.c_char_p, ctypes.c_char_p, array_1d_double]
+libcd.get_dc.restype = array_1d_double
+
+
+dc = libcd.get_dc("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", 2.0)
 
 local_density = np.empty(1026)
 distance_to_higher_density = np.empty(1026)
 
 libcd.get_local_density("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", dc, local_density, "cutoff")
 libcd.get_distance_to_higher_density("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", local_density, distance_to_higher_density, len(local_density))
-print "dc: ", dc
-print local_density
-print distance_to_higher_density
+
+gamma = local_density*distance_to_higher_density
+
+gamma2 = libcd.cluster_dp("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54")
+
 plt.plot(local_density, distance_to_higher_density, 'o')
 plt.show()
 

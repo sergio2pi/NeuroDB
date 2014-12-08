@@ -1,3 +1,5 @@
+//compiling with : gcc -fPIC -o cfsfdp.so -shared cfsfdp.c -I/usr/include/pgsql -L/usr/lib/postgresql92/lib64 -lpq
+
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,7 +40,7 @@ float get_distance_from_res(PGresult *res, int i, int j)
 
 }
 
-float get_dc(char connect[150], char id_block[20])
+float get_dc(char connect[150], char id_block[20], float percent)
 {
     char query[200];
     strcpy(query,"SELECT spike.p1, spike.p2, spike.p3, spike.id from SPIKE JOIN  segment ON id_segment = segment.id WHERE segment.id_block = ");
@@ -48,7 +50,6 @@ float get_dc(char connect[150], char id_block[20])
     PGresult        *res;
     int             rec_count;
 
-    float percent = 2.0;
     int n = 0, i, j;
     float dc = 0.0;
     float* distances = NULL;
@@ -77,7 +78,7 @@ float get_dc(char connect[150], char id_block[20])
       }
 
     //There are rec_count zeros, because distances from itselfs
-    position = rec_count + 2*rec_count*percent/100 -1;
+    position = rec_count*percent/100 -1;//position = rec_count + 2*rec_count*percent/100 -1;
     qsort(distances, rec_count, sizeof(float), &compare);
 
     dc = distances[position];
@@ -87,7 +88,7 @@ float get_dc(char connect[150], char id_block[20])
     return dc;
 }
 
-int get_local_density(char connect[150], char id_block[20], float dc, double* local_density)
+int get_local_density(char connect[150], char id_block[20], float dc, double* local_density, char kernel[20])
 //TODO: Parameter size
 {
 
@@ -98,6 +99,12 @@ int get_local_density(char connect[150], char id_block[20], float dc, double* lo
     char query[200];
     int i, j;
     double distance;
+
+    if (strcmp(kernel, "gaussian") && strcmp(kernel, "cutoff"))
+    {
+        puts("Kernel parameter must be \"gaussian\" or \"cutoff\".");
+        return 1;
+    }
 
     strcpy(query,"SELECT spike.p1, spike.p2, spike.p3 from SPIKE JOIN  segment ON id_segment = segment.id WHERE segment.id_block = ");
     strcat(query, id_block);
@@ -121,16 +128,30 @@ int get_local_density(char connect[150], char id_block[20], float dc, double* lo
 
     for (i = 0; i < rec_count; i++) local_density[i] = 0;
 
-    for (i = 0; i < rec_count; i++) {
-          for (j = i+1; j < rec_count; j++) {
-                distance = get_distance_from_res(res, i, j);
-                if ( (distance - dc) < 0 )
-                {
-                    local_density[i] += 1;
-                    local_density[j] += 1;
-                }
+    if (!strcmp(kernel, "cutoff") )
+    {
+        for (i = 0; i < rec_count; i++) {
+              for (j = i+1; j < rec_count; j++) {
+                    distance = get_distance_from_res(res, i, j);
+                    if ( (distance - dc) < 0 )
+                    {
+                        local_density[i] += 1;
+                        local_density[j] += 1;
+                    }
+              }
           }
-      }
+    }
+
+    if (!strcmp(kernel, "gaussian") )
+    {
+        for (i = 0; i < rec_count; i++) {
+              for (j = i+1; j < rec_count; j++) {
+                    distance = get_distance_from_res(res, i, j);
+                    local_density[i] = local_density[i] + exp(-(distance/dc)*(distance/dc));
+                    local_density[j] = local_density[j] + exp(-(distance/dc)*(distance/dc));
+              }
+          }
+    }
 
     PQclear(res);
     PQfinish(conn);
@@ -173,8 +194,6 @@ int get_distance_to_higher_density(char connect[], char id_block[], double* rho,
     for (i = 0; i < rec_count; i++)
         delta[i] = 0;
 
-    puts("flag");
-
     for(i = 0; i < nSamples; i++){
         dist = 0.0;
         flag = 0;
@@ -205,8 +224,117 @@ int get_distance_to_higher_density(char connect[], char id_block[], double* rho,
     return 0;
 }
 
+double mean(double v[], int n)
+{
+    int i;
+    float m = 0;
+
+    for(i=0; i<n; i++) m += v[i];
+
+    return m/n;
+}
+
+double* get_centers_cluster_dp(char connect[], char id_block[])
+{
+    PGconn          *conn;
+    PGresult        *res;
+    int             rec_count;
+
+    char query[200];
+    float dc;
+    double* local_density;
+    double* distance_to_higher_density;
+    double* gamma;
+    float meanf;
+    double* centers = NULL;
+    int k=0, i;
+
+    conn = PQconnectdb(connect);
+
+    strcpy(query,"SELECT spike.id, spike.p1, spike.p2, spike.p3 from SPIKE JOIN  segment ON id_segment = segment.id WHERE segment.id_block = ");
+    strcat(query, id_block);
+
+    if (PQstatus(conn) == CONNECTION_BAD) {
+        puts("cluster_dp: We were unable to connect to the database");
+        return NULL;
+    }
+
+    res = PQexec(conn,query);
+    rec_count = PQntuples(res);
+    local_density = (double*)calloc(rec_count,sizeof(double));
+    distance_to_higher_density = (double*)calloc(rec_count,sizeof(double));
+    gamma = (double*)calloc(rec_count,sizeof(double));
+
+    dc = get_dc("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", 2);
+
+    get_local_density("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", dc, local_density, "cutoff");
+    get_distance_to_higher_density("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54",local_density, distance_to_higher_density, 1026);
+
+    // gamma is rho*delta
+    for(i=0; i<rec_count; i++)
+    {
+        gamma[i] = local_density[i]*distance_to_higher_density[i];
+    }
+
+    //points > 5*mean are centers of cluster
+    meanf = mean(gamma, rec_count);
+    centers = (double*)malloc(sizeof(double));
+    centers[0] = 0;
+    for(i=0; i<rec_count; i++)
+    {
+        if (gamma[i] > 5*meanf)
+        {
+            centers = (double*)realloc(centers, sizeof(double)*(centers[0]+1));
+            sscanf(PQgetvalue(res, i, 0),"%lf",&centers[(int)centers[0]+1]);
+            printf("%lf\n",centers[(int)centers[0]+1]);
+            centers[0]++;
+        }
+    }
+
+    // centers contains id of spike centers
+    return centers;
+}
+
+double** get_cluster_dp(char connect[], char id_block[], double* centers)
+{
+    PGconn          *conn;
+    PGresult        *res;
+    int             rec_count;
+
+    char query[200];
+
+    conn = PQconnectdb(connect);
+
+    strcpy(query,"SELECT spike.id, spike.p1, spike.p2, spike.p3 from SPIKE JOIN  segment ON id_segment = segment.id WHERE segment.id_block = ");
+    strcat(query, id_block);
+
+    if (PQstatus(conn) == CONNECTION_BAD) {
+        puts("cluster_dp: We were unable to connect to the database");
+        return NULL;
+    }
+
+    res = PQexec(conn,query);
+    rec_count = PQntuples(res);
+
+
+}
 
 int main(int argc, char* argv[])
 {
+//float dc = 0;
+    int i;
+    double* local_density = (double*)calloc(1026,sizeof(double));
+    double* distance_to_higher_density = (double*)calloc(1026,sizeof(double));
+    //double* gamma = (double*)calloc(1026,sizeof(double));
+    double* centers = NULL;
+
+    float dc = get_dc("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", 2);
+
+    get_local_density("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", dc, local_density, "gaussian");
+
+    get_distance_to_higher_density("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54",local_density, distance_to_higher_density, 1026);
+
+    centers = get_centers_cluster_dp("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54");
+
     return 1;
 }
