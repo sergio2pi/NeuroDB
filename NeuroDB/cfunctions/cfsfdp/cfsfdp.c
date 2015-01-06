@@ -17,6 +17,72 @@ int compare(const void *_a, const void *_b) {
     return (*a - *b);
 }
 
+int pivot(double *array, double *index, int left, int right)
+{
+    int i;
+    int pivote;
+    double pivot_value;
+    double aux;
+    double aux2;
+
+    pivote = left;
+    pivot_value = index[pivote];
+    for (i=left+1; i<=right; i++){
+        if (index[i] < pivot_value){
+                pivote++;
+                aux=array[i];
+                aux2=index[i];
+                array[i]=array[pivote];
+                index[i]=index[pivote];
+                array[pivote]=aux;
+                index[pivote]=aux2;
+
+        }
+    }
+    aux=array[left];
+    aux2=index[left];
+    array[left]=array[pivote];
+    index[left]=index[pivote];
+    array[pivote]=aux;
+    index[pivote]=aux2;
+    return pivote;
+}
+
+void Quicksort(double *array, double *index, int left, int right)
+{
+     int pivote;
+     if(left < right){
+        pivote=pivot(array, index, left, right);
+        Quicksort(array, index, left, pivote-1);
+        Quicksort(array, index, pivote+1, right);
+     }
+}
+
+double mean(double v[], int n)
+{
+    int i;
+    float m = 0;
+
+    for(i=0; i<n; i++) m += v[i];
+
+    return m/n;
+}
+
+/**
+  @brief Get Eclidean Distance within 2 3D points (P1 and P2).
+
+  P1 contains 3 components (float) x1, y1 and z1
+  P2 contains 3 components (float) x2, y2 and z2
+
+  @param x1
+  @param x2
+  @param y1
+  @param y2
+  @param z1
+  @param z2
+
+  @returns Eclidean Distance within P1 and P2
+  */
 float get_distance(float x1, float y1, float z1, float x2, float y2, float z2)
 {
     double tmp = pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2);
@@ -24,6 +90,36 @@ float get_distance(float x1, float y1, float z1, float x2, float y2, float z2)
 }
 
 
+/**
+  @brief Get Eclidean Distance within 2 3D points from a PGresult group of points.
+
+  Points are from structure PGresult (structure of libpq, that represent a result of a query): parameter res.
+  Each position of res, contains a point and the first 3 components of each position must be the components of
+  point, see example.
+  Points into structure are indexed by i and j parameters.
+
+  @param res, PGresult that contains in each position the 3 components of the point.
+  @param i, index of point i.
+  @param j, index of point j.
+
+  @returns Eclidean Distance within point j and point i from a PGresult.
+
+  Example:
+  \verbatim
+      float      distance;
+      PGconn     *conn;
+      PGresult   *res;
+      char       query[] = "SELECT spike.p1, spike.p2, spike.p3, spike.id from SPIKE JOIN
+                            segment ON id_segment = segment.id WHERE segment.id_block = 54";
+
+      conn = PQconnectdb("dbname=demo host=192.168.2.2 user=postgres password=postgres");
+
+      res = PQexec(conn,query);
+
+      distance = get_distance_from_res(res, 0, 1); //Euclidean distance within point 0 and point 1
+   \endverbatim
+
+  */
 float get_distance_from_res(PGresult *res, int i, int j)
 {
     float tmp;
@@ -40,6 +136,28 @@ float get_distance_from_res(PGresult *res, int i, int j)
 
 }
 
+
+/**
+  @brief DC is a cutoff distance used by dp algorithm to consider a point closer of farther
+  to a center of point's density.
+
+  DC is the average number of neighbors, around 1 to 2% of the total number of points in the data set.
+
+  @param connect, string of data connect. See example.
+  @param id_block, id project block where this function calculates the dc.
+  @param percent, percent of the total number of points in the data set to consider.
+
+  @returns Cutoff distance, DC.
+
+  Example:
+  \verbatim
+      float      dc;
+      char connect[] = "dbname=demo host=192.168.2.2 user=postgres password=postgres";
+
+      dc = get_dc(connect, 54, 2);
+   \endverbatim
+
+  */
 float get_dc(char connect[150], char id_block[20], float percent)
 {
     char query[200];
@@ -88,6 +206,27 @@ float get_dc(char connect[150], char id_block[20], float percent)
     return dc;
 }
 
+
+/**
+  @brief Local Density or Rho is basically equal to the number of points that are closer than dc to point i.
+
+  @param connect, string of data connect. See example.
+  @param id_block, id project block where this function calculates the dc.
+  @param local_density, array to return with local density of each point.
+  @param kernel, criteria of measure distance, it must be "cutoff" or "gaussian".
+
+  @returns Code Error (TODO)
+
+  \verbatim
+      float      dc;
+      char connect[] = "dbname=demo host=192.168.2.2 user=postgres password=postgres";
+      double* local_density = (double*)calloc(1026,sizeof(double));
+
+      dc = get_dc(connect, 54, 2);
+      get_local_density(connect, "54", dc, local_density, "gaussian");
+   \endverbatim
+
+  */
 int get_local_density(char connect[150], char id_block[20], float dc, double* local_density, char kernel[20])
 //TODO: Parameter size
 {
@@ -159,14 +298,39 @@ int get_local_density(char connect[150], char id_block[20], float dc, double* lo
     return 0;
 }
 
+/**
+  @brief Minimum Distance with higher density is measured by computing the minimum
+  distance between the point i and any other point with higher density.
 
-int get_distance_to_higher_density(char connect[], char id_block[], double* rho, double* delta, int size){
+  @param connect, string of data connect. See example.
+  @param id_block, id project block where this function calculates the dc.
+  @param rho, array from get_local_density.
+  @param delta, array to return.
+  @param size, array lenght.
+
+  @returns Code Error (TODO)
+
+  \verbatim
+      float      dc;
+      char connect[] = "dbname=demo host=192.168.2.2 user=postgres password=postgres";
+      double* local_density = (double*)calloc(1026,sizeof(double));
+      double* distance_to_higher_density = (double*)calloc(1026,sizeof(double));
+
+      dc = get_dc(connect, 54, 2);
+
+      get_local_density(connect, "54", dc, local_density, "gaussian");
+      get_distance_to_higher_density(connect, "54",local_density, distance_to_higher_density, 1026);
+
+
+   \endverbatim
+
+  */
+int get_distance_to_higher_density(char connect[], char id_block[], double* rho, double* delta){
 
     PGconn          *conn;
     PGresult        *res;
     int             rec_count;
 
-    int nSamples = size;
     double dist;
     double tmp;
     char query[200];
@@ -194,10 +358,10 @@ int get_distance_to_higher_density(char connect[], char id_block[], double* rho,
     for (i = 0; i < rec_count; i++)
         delta[i] = 0;
 
-    for(i = 0; i < nSamples; i++){
+    for(i = 0; i < rec_count; i++){
         dist = 0.0;
         flag = 0;
-        for(j = 0; j < nSamples; j++){
+        for(j = 0; j < rec_count; j++){
             if(i == j) continue;
             if(rho[j] > rho[i]){
 
@@ -210,7 +374,7 @@ int get_distance_to_higher_density(char connect[], char id_block[], double* rho,
             }
         }
         if(!flag){
-            for(k = 0; k < nSamples; k++){
+            for(k = 0; k < rec_count; k++){
                 tmp = get_distance_from_res(res, i, k);
                 dist = tmp > dist ? tmp : dist;
             }
@@ -224,15 +388,7 @@ int get_distance_to_higher_density(char connect[], char id_block[], double* rho,
     return 0;
 }
 
-double mean(double v[], int n)
-{
-    int i;
-    float m = 0;
 
-    for(i=0; i<n; i++) m += v[i];
-
-    return m/n;
-}
 
 double* get_centers_cluster_dp(char connect[], char id_block[])
 {
@@ -267,31 +423,33 @@ double* get_centers_cluster_dp(char connect[], char id_block[])
 
     dc = get_dc("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", 2);
 
-    get_local_density("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", dc, local_density, "cutoff");
-    get_distance_to_higher_density("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54",local_density, distance_to_higher_density, 1026);
+    get_local_density("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", dc, local_density, "gaussian");
+    get_distance_to_higher_density("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54",local_density, distance_to_higher_density);
+
+    Quicksort(distance_to_higher_density, local_density, 0, rec_count-1);
 
     // gamma is rho*delta
     for(i=0; i<rec_count; i++)
     {
-        gamma[i] = local_density[i]*distance_to_higher_density[i];
+        gamma[i] = i*distance_to_higher_density[i];
     }
 
     //points > 5*mean are centers of cluster
     meanf = mean(gamma, rec_count);
     centers = (double*)malloc(sizeof(double));
+
     centers[0] = 0;
     for(i=0; i<rec_count; i++)
     {
-        if (gamma[i] > 5*meanf)
+        if (gamma[i] > 2.5*meanf)
         {
             centers = (double*)realloc(centers, sizeof(double)*(centers[0]+1));
-            sscanf(PQgetvalue(res, i, 0),"%lf",&centers[(int)centers[0]+1]);
-            printf("%lf\n",centers[(int)centers[0]+1]);
+            //sscanf(PQgetvalue(res, i, 0),"%lf",&centers[(int)centers[0]+1]);
+            centers[(int)centers[0]+1] = i;
             centers[0]++;
         }
     }
-
-    // centers contains id of spike centers
+    // centers contains index of spike centers, centers[0] is lenght of center
     return centers;
 }
 
@@ -302,6 +460,10 @@ double** get_cluster_dp(char connect[], char id_block[], double* centers)
     int             rec_count;
 
     char query[200];
+    int i, j;
+    double** clusters;
+    float dc, distance;
+    float x1, x2, y1, y2, z1, z2, aux;
 
     conn = PQconnectdb(connect);
 
@@ -316,25 +478,55 @@ double** get_cluster_dp(char connect[], char id_block[], double* centers)
     res = PQexec(conn,query);
     rec_count = PQntuples(res);
 
+    dc = get_dc("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", 2);
+    if((centers != NULL)&&(centers[0] > 0))
+    {
+        clusters = (double**)malloc(sizeof(double*)*centers[0]);
+        for(i=1; i<centers[0]+1; i++)
+        {
+            clusters[i-1] = (double*)calloc(1,sizeof(double));
+            for(j=0; j<rec_count; j++)
+            {
+                sscanf(PQgetvalue(res, centers[i], 1),"%f",&x1);
+                sscanf(PQgetvalue(res, centers[i], 2),"%f",&y1);
+                sscanf(PQgetvalue(res, centers[i], 3),"%f",&z1);
+                sscanf(PQgetvalue(res, j, 1),"%f",&x2);
+                sscanf(PQgetvalue(res, j, 2),"%f",&y2);
+                sscanf(PQgetvalue(res, j, 3),"%f",&z2);
+                distance = get_distance(x1, y1, z1, x2, y2, z2);
+                if (distance <= dc/4)
+                {
+                    clusters[i-1] = (double*)realloc(clusters[i-1], sizeof(double)*(clusters[i-1][0]+2));
+                    sscanf(PQgetvalue(res, j, 0), "%f", &aux);
+                    clusters[i-1][(int)clusters[i-1][0]+1] = (double)aux;
+                    clusters[i-1][0]++;
+                }
+            }
+        }
+    }
 
+    return clusters;
 }
 
 int main(int argc, char* argv[])
 {
-//float dc = 0;
+float dc = 0;
     int i;
     double* local_density = (double*)calloc(1026,sizeof(double));
     double* distance_to_higher_density = (double*)calloc(1026,sizeof(double));
     //double* gamma = (double*)calloc(1026,sizeof(double));
     double* centers = NULL;
-
-    float dc = get_dc("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", 2);
-
-    get_local_density("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", dc, local_density, "gaussian");
-
-    get_distance_to_higher_density("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54",local_density, distance_to_higher_density, 1026);
-
+    double** clusters;
+//
+//    float dc = get_dc("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", 2);
+//
+//    get_local_density("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", dc, local_density, "gaussian");
+//
+//    get_distance_to_higher_density("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54",local_density, distance_to_higher_density, 1026);
+//
     centers = get_centers_cluster_dp("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54");
+//
+//    clusters = get_cluster_dp("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", centers);
 
     return 1;
 }
