@@ -7,6 +7,7 @@
 #include <string.h>
 #include <math.h>
 
+//TODO Returns array. Now all arrays are defined in python a passed it by parameters. 
 
 int compare(const void *_a, const void *_b) {
     int *a, *b;
@@ -389,7 +390,7 @@ int get_distance_to_higher_density(char connect[], char id_block[], double* rho,
 }
 
 
-
+/*
 double* get_centers_cluster_dp(char connect[], char id_block[])
 {
     PGconn          *conn;
@@ -451,9 +452,9 @@ double* get_centers_cluster_dp(char connect[], char id_block[])
     }
     // centers contains index of spike centers, centers[0] is lenght of center
     return centers;
-}
+}*/
 
-double** get_cluster_dp(char connect[], char id_block[], double* centers)
+/*double** get_cluster_dp(char connect[], char id_block[], double* centers)
 {
     PGconn          *conn;
     PGresult        *res;
@@ -506,7 +507,120 @@ double** get_cluster_dp(char connect[], char id_block[], double* centers)
     }
 
     return clusters;
+}*/
+
+void get_centers_cluster_dp(char connect[], char id_block[], double* centers)
+{
+    PGconn          *conn;
+    PGresult        *res;
+    int             rec_count;
+
+    char query[200];
+    float dc;
+    double* local_density;
+    double* distance_to_higher_density;
+    double* gamma;
+    float meanf;
+    int k=0, i;
+    
+    conn = PQconnectdb(connect);
+    
+    strcpy(query,"SELECT spike.id, spike.p1, spike.p2, spike.p3 from SPIKE JOIN  segment ON id_segment = segment.id WHERE segment.id_block = ");
+    strcat(query, id_block);
+    
+    if (PQstatus(conn) == CONNECTION_BAD) {
+        puts("cluster_dp: We were unable to connect to the database");
+        return NULL;
+    }
+    
+    res = PQexec(conn,query);
+    rec_count = PQntuples(res);
+    local_density = (double*)calloc(rec_count,sizeof(double));
+    distance_to_higher_density = (double*)calloc(rec_count,sizeof(double));
+    gamma = (double*)calloc(rec_count,sizeof(double));
+    
+    dc = get_dc("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", 2);
+    
+    get_local_density("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", dc, local_density, "gaussian");
+    get_distance_to_higher_density("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54",local_density, distance_to_higher_density);
+    
+    Quicksort(distance_to_higher_density, local_density, 0, rec_count-1);
+    
+    // gamma is rho*delta
+    for(i=0; i<rec_count; i++)
+    {
+        gamma[i] = i*distance_to_higher_density[i];
+    }
+    
+    //points > 5*mean are centers of cluster
+    meanf = mean(gamma, rec_count);
+    centers = (double*)malloc(sizeof(double));
+    
+    centers[0] = 0;
+    for(i=0; i<rec_count; i++)
+    {
+        if (gamma[i] > 2.5*meanf)
+        {
+            centers = (double*)realloc(centers, sizeof(double)*(centers[0]+1));
+            //sscanf(PQgetvalue(res, i, 0),"%lf",&centers[(int)centers[0]+1]);
+            centers[(int)centers[0]+1] = i;
+            centers[0]++;
+        }
+    }
+    // centers contains index of spike centers, centers[0] is lenght of center
+    return centers;
 }
+
+void get_cluster_dp(char connect[], char id_block[], double center, double* cluster, double dc)
+{
+    PGconn          *conn;
+    PGresult        *res;
+    int             rec_count;
+
+    char query[200];
+    int i, j;
+    float dc, distance;
+    float x1, x2, y1, y2, z1, z2, aux;
+
+    conn = PQconnectdb(connect);
+
+    strcpy(query,"SELECT spike.id, spike.p1, spike.p2, spike.p3 from SPIKE JOIN  segment ON id_segment = segment.id WHERE segment.id_block = ");
+    strcat(query, id_block);
+
+    if (PQstatus(conn) == CONNECTION_BAD) {
+        puts("cluster_dp: We were unable to connect to the database");
+        return NULL;
+    }
+
+    res = PQexec(conn,query);
+    rec_count = PQntuples(res);
+    
+
+    cluster = (double**)malloc(sizeof(double*));
+    i = 1;
+    for(j=0; j<rec_count; j++)
+    {
+        sscanf(PQgetvalue(res, centers[i], 1),"%f",&x1);
+        sscanf(PQgetvalue(res, centers[i], 2),"%f",&y1);
+        sscanf(PQgetvalue(res, centers[i], 3),"%f",&z1);
+        sscanf(PQgetvalue(res, j, 1),"%f",&x2);
+        sscanf(PQgetvalue(res, j, 2),"%f",&y2);
+        sscanf(PQgetvalue(res, j, 3),"%f",&z2);
+        distance = get_distance(x1, y1, z1, x2, y2, z2);
+        if (distance <= dc)
+        {
+            cluster = (double*)realloc(cluster, sizeof(double)*(i+1));
+            sscanf(PQgetvalue(res, j, 0), "%f", &aux);
+            clusters[i] = (double)aux;
+            i++;
+        }
+        clusters[0] = i;
+    }
+    
+    return clusters;
+		
+}
+
 
 int main(int argc, char* argv[])
 {
