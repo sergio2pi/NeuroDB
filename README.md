@@ -10,3 +10,5 @@ El preprocesamiento de la señal, la adquisición de los spikes[1] y la clusteri
 También se utiliza el método de clustering propuesto por Alejandro Laio en su trabajo "Clustering by fast search-and-find of density peaks" (http://people.sissa.it/~laio/Research/Res_clustering.php)
 
 [1] Spikes: porción de señal donde se registro actividad debido a estimulo externo.
+
+Para conocer más acerca de NeuroDB visitar la wiki del proyecto https://github.com/sergio2pi/NeuroDB/wiki
