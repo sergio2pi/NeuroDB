@@ -438,7 +438,7 @@ int get_centers_cluster_dp(char connect[], char id_block[], char channel[], doub
     double* distance_to_higher_density;
     double* gamma;
     float meanf;
-    int k=0, i;
+    int i;
 
     conn = PQconnectdb(connect);
 
@@ -567,6 +567,37 @@ int get_cluster_dp(char connect[], char id_block[], char channel[], double cente
 }
 
 
+int get_n_dbspikes(char connect[], char id_block[], char channel[])
+{
+    PGconn          *conn;
+    PGresult        *res;
+
+    char query[250];
+    int nspikes;
+
+    conn = PQconnectdb(connect);
+
+    strcpy(query, "SELECT count(spike.id) from SPIKE ");
+    strcat(query, "JOIN segment ON id_segment = segment.id ");
+    strcat(query, "JOIN recordingchannel ON id_recordingchannel = recordingchannel.id ");
+    strcat(query, "WHERE segment.id_block = ");
+    strcat(query, id_block);
+    strcat(query, " AND recordingchannel.index = ");
+    strcat(query, channel);
+
+    if (PQstatus(conn) == CONNECTION_BAD) {
+        puts("cluster_dp: We were unable to connect to the database");
+        return 1;
+    }
+
+    res = PQexec(conn,query);
+
+    sscanf(PQgetvalue(res, 0, 0),"%d",&nspikes);
+
+    return nspikes;
+}
+
+
 int main(int argc, char* argv[])
 {
     //float dc = 0;
@@ -576,7 +607,7 @@ int main(int argc, char* argv[])
     //double* gamma = (double*)calloc(1026,sizeof(double));
     double* centers = (double*)calloc(1026,sizeof(double));
     double* cluster = (double*)calloc(1026,sizeof(double));
-    double** clusters;
+    //double** clusters;
 //
     float dc = get_dc("dbname=demo host=192.168.2.2 user=postgres password=postgres", "54", "3", 2);
 //

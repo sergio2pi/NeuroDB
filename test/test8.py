@@ -33,6 +33,9 @@ libcd.get_cluster_dp.restype = ctypes.c_int
 libcd.get_dc.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_float]
 libcd.get_dc.restype = ctypes.c_float
 
+libcd.get_n_dbspikes.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
+libcd.get_n_dbspikes.restype = ctypes.c_int
+
 connect = "dbname=demo host=192.168.2.2 user=postgres password=postgres"
 id_block = "54"
 channel = "3"
@@ -46,19 +49,21 @@ libcd.get_centers_cluster_dp(connect, id_block, channel, centers, dc)
 libcd.get_cluster_dp(connect, id_block, channel,  centers[1], cluster1, dc)
 libcd.get_cluster_dp(connect, id_block, channel,  centers[2], cluster2, dc)
 
-plt.subplot(2,1,1)
+plt.subplot(3,1,1)
 for i in range(int(cluster1[0])):
     if i != 0:
         spikes = neodb.core.spikedb.get_from_db(dbconn, id_block = 54, channel = 3, id = int(cluster1[i]))
         signal = spikes[0].waveform
         plt.plot(signal)
 
-plt.subplot(2,1,2)
+plt.subplot(3,1,2)
 for i in range(int(cluster2[0])):
     if i != 0:
         spikes = neodb.core.spikedb.get_from_db(dbconn, id_block = 54, channel = 3, id = int(cluster2[i]))
         signal = spikes[0].waveform
         plt.plot(signal)
-plt.show()
-    
+#plt.show()
+plt.savefig('/home/sergio/iibm/sandbox/asas/image.png')
+
+print libcd.get_n_dbspikes(connect, id_block, channel)
 pass

@@ -32,9 +32,11 @@ import threading
 import Queue
 import time
 import re
-import signalProcessor.spike as Spike
+import Spike.spike as Spike
+import Spike.sorter as Sorter
 import numpy as np
 from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
 
 NDB = None
 
@@ -57,7 +59,6 @@ def connect_db(user=config.DBUSER, password=config.DBPASSWORD, hostname=config.D
 
 
 #### PROJECT ####
-
 
 def create_project(name, date, description = None, projectcode = None):
     """create_project(name, description = None, date, projectcode)
@@ -240,7 +241,6 @@ def add_session(id_project, id_individual, date, name, session_path,
         tlength = len(channel)/sample_rate
         tstart = tstart + tlength
 
-
 def create_individual(name, description, birth_date, picture_path):
     """
     create_individual(name, description, birth_date, picture_path)
@@ -299,9 +299,6 @@ def get_individual(id):
     
     return individual
 
-
-
-
 def save_channel_spikes(id_block, channel):
     """
     save_channel_spikes(id_block, channel)
@@ -353,7 +350,57 @@ def save_channel_spikes(id_block, channel):
             id_spike = spike.save(NDB)
             
     #TODO: returns of the function neurodb.save_channel_spikes
+
+def get_clusters(id_block, channel, method, save=None):
+    if method == 'dp':
+        user=config.DBUSER
+        password=config.DBPASSWORD
+        hostname=config.DBHOSTNAME
+        dbname=config.DBNAME
+        
+        sorter = Sorter.DPSorter(dbname, hostname, user, password)
+        
+    if method == 'paramagnetic':
+        global NDB
     
+        if NDB == None:
+            connect_db()
+        
+        sorter = Sorter.PMGSorter(NDB)
+    
+    if save == True:
+        
+        
+    clusters = sorter.get_clusters_fromdb(id_block, channel)
+    
+    
+    
+    return clusters
+
+
+def draw_clusters(clusters, path = None):
+    global NDB
+
+    if NDB == None:
+        connect_db()
+    
+    ncluster = len(clusters)
+    
+    for i in range(ncluster):
+        plt.subplot(ncluster,1,i)
+        
+        for id_spike in clusters[i]:
+            spike = neodb.core.spikedb.get_from_db(NDB, id_block = 54, channel = 3, id = int(id_spike))
+            plt.plot(spike[0].waveform)
+            
+    if path:
+        plt.savefig(path)
+    else:
+        plt.show()
+    
+    
+
+
 def update_spike_coordenates(id_block, channel):
     #TODO: Create p1, p2 y p3 columns
     global NDB
@@ -379,7 +426,6 @@ def update_spike_coordenates(id_block, channel):
         neodb.core.spikedb.update(NDB, id = id, p1 = p[0], p2 = p[1], p3 = p[2])
         i = i+1
     
-    pass
 
 # def eliminar(ndb):
 #     
