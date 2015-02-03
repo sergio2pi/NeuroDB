@@ -22,6 +22,7 @@ import threading
 import NeuroDB.config as config
 import argparse
 import neodb.core
+import neodb.config
 import datetime
 import neodb.dbutils
 import os
@@ -51,7 +52,7 @@ def connect_db(user=config.DBUSER, password=config.DBPASSWORD, hostname=config.D
        """
     global NDB
     try:
-        NDB = neodb.dbconnect(dbname, user, password, hostname)
+        NDB = neodb.config.dbconnect(dbname, user, password, hostname)
     except argparse.ArgumentError:
         pass
     
@@ -367,13 +368,11 @@ def get_clusters(id_block, channel, method, save=None):
             connect_db()
         
         sorter = Sorter.PMGSorter(NDB)
-    
-    if save == True:
-        
         
     clusters = sorter.get_clusters_fromdb(id_block, channel)
     
-    
+    if save == True:
+        neodb.core.cluster.save(NDB, id_block, channel, clusters)   
     
     return clusters
 
@@ -458,6 +457,10 @@ if __name__ == '__main__':
     #last_file('/home/sergio/iibm/sandbox')
 
     #save_channel_spikes(54, 3)
-    update_spike_coordenates(54, 3)
-
+    #update_spike_coordenates(54, 3)
+    
+    #clusters = get_clusters(54, 3, 'paramagnetic', save=True)
+    clusters = get_clusters('54', '3', 'dp', save=True)
+    draw_clusters(clusters)
+    
     pass
